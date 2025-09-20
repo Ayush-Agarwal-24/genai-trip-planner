@@ -1,0 +1,16 @@
+# frontend
+app/node_modules/
+app/dist/
+app/.env*
+!app/.env.local.example
+
+# backend
+api/.venv/
+api/__pycache__/
+api/.env*
+!api/.env.example
+
+# general
+*.log
+.DS_Store
+Thumbs.db
