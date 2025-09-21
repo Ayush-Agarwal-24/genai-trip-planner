@@ -1,9 +1,9 @@
-# root
+# env
 .env
 *.env
-*.env.local
-**/.env.production
-**/.env.development
+**/*.env*
+!docs/**/*.*
+!**/*.example
 
 # node / vite
 node_modules/
@@ -17,9 +17,3 @@ __pycache__/
 *.pyc
 *.pyo
 api/.venv/
-
-# misc
-.DS_Store
-.vscode/
-.idea/
-*.log
