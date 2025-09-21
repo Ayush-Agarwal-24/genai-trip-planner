@@ -6,88 +6,93 @@ type ImageMoodBoardProps = {
   imageUrls?: string[];
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-
-// Dummy Unsplash images for sample/prototype itinerary
-const getUnsplashImages = (destination: string) => [
-  `https://plus.unsplash.com/premium_photo-1661963054563-ce928e477ff3?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D`,
-  `https://images.unsplash.com/photo-1603262110263-fb0112e7cc33?q=80&w=1171&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D`,
-  `https://images.unsplash.com/photo-1599661046827-dacff0c0f09a?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D`,
-];
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8000";
 
 export function ImageMoodBoard({ destination, variant, imageUrls }: ImageMoodBoardProps) {
   const [images, setImages] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
-
-    if (variant === "template") {
-      // Use user-provided imageUrls if available, else fetch from backend, else fallback to Unsplash
-      if (Array.isArray(imageUrls) && imageUrls.length > 0) {
-        setImages(imageUrls);
-      } else if (destination) {
-        fetch(`${API_BASE_URL}/api/v1/city-images?city=${encodeURIComponent(destination)}`)
-          .then(res => res.json())
-          .then(data => {
-            if (Array.isArray(data.images) && data.images.length > 0) {
-              setImages(data.images);
-            } else {
-              setImages(getUnsplashImages(destination));
-            }
-          })
-          .catch(() => setImages(getUnsplashImages(destination)));
-      } else {
-        setImages(getUnsplashImages(destination));
+    let canceled = false;
+    async function run() {
+      setLoaded(false);
+      if (imageUrls && imageUrls.length) {
+        if (!canceled) {
+          setImages(imageUrls);
+          setLoaded(true);
+        }
+        return;
       }
-      return;
+      if (!destination) {
+        if (!canceled) {
+          setImages([]);
+          setLoaded(true);
+        }
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE_URL}/api/v1/city-images?city=${encodeURIComponent(destination)}`);
+        const data = await resp.json().catch(() => ({ images: [] }));
+        const imgs = Array.isArray(data.images) ? data.images : [];
+        if (!canceled) {
+          setImages(imgs);
+          setLoaded(true);
+        }
+      } catch {
+        if (!canceled) {
+          setImages([]);
+          setLoaded(true);
+        }
+      }
     }
-
-    // if (variant === "live") {
-    //   const fetchImages = async () => {
-    //     const newImages: string[] = [];
-    //     for (let i = 0; i < 3; i++) {
-    //       try {
-    //         const prompt = `${destination} travel inspiration ${i + 1}`;
-    //         const res = await fetch(`${API_BASE_URL}/api/v1/generate-image`, {
-    //           method: "POST",
-    //           headers: { "Content-Type": "application/json" },
-    //           body: JSON.stringify({ prompt }),
-    //         });
-    //         const data = await res.json();
-    //         if (data.image_base64) {
-    //           const cleanBase64 = data.image_base64.replace(/\s/g, '').trim();
-    //           const dataUrl = `data:image/png;base64,${cleanBase64}`;
-    //           console.log("Received image_base64 length:", cleanBase64.length);
-    //           console.log("Sample data URL:", dataUrl.slice(0, 100) + "...");
-    //           newImages.push(dataUrl);
-    //         } else if (data.image_url) {
-    //           console.log("Received image_url:", data.image_url);
-    //           newImages.push(data.image_url);
-    //         }
-    //       } catch {
-    //         // Do not push fallback images
-    //       }
-    //     }
-    //     if (isMounted) setImages(newImages.filter(Boolean));
-    //   };
-    //   fetchImages();
-    // } else {
-    //   setImages([]); // For "error" or unknown variant, show nothing
-    // }
-
+    run();
     return () => {
-      isMounted = false;
+      canceled = true;
     };
-  }, [destination, variant, imageUrls]);
+  }, [destination, imageUrls?.join("|")]);
+
+  if (!loaded) return null;
+
+  const size = "clamp(280px, 28vw, 620px)";
 
   return (
-    <div className={`moodboard moodboard--${variant}`}>
-      {images.filter(Boolean).map((src, index) => (
-        <figure key={src + index} className={`moodboard__tile moodboard__tile--${index}`}>
+    <div
+      className={`moodboard moodboard--${variant}`}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, max-content)",
+        justifyContent: "center",
+        gap: 16,
+        width: "100%"
+      }}
+    >
+      {images.map((src, i) => (
+        <figure
+          key={src + i}
+          className={`moodboard__tile moodboard__tile--${i}`}
+          style={{
+            width: size,
+            height: size,
+            margin: 0,
+            borderRadius: 16,
+            overflow: "hidden",
+            background: "rgba(15,23,42,0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 0 0 1px rgba(148,163,184,0.15) inset"
+          }}
+        >
           <img
             src={src}
-            alt={`${destination || "Image"} inspiration ${index + 1}`}
+            alt={`${destination || "Image"} ${i + 1}`}
             loading="lazy"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              display: "block"
+            }}
           />
         </figure>
       ))}

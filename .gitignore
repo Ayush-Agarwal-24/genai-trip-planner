@@ -1,16 +1,25 @@
-# frontend
-app/node_modules/
-app/dist/
-app/.env*
-!app/.env.local.example
+# root
+.env
+*.env
+*.env.local
+**/.env.production
+**/.env.development
 
-# backend
+# node / vite
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
 api/.venv/
-api/__pycache__/
-api/.env*
-!api/.env.example
 
-# general
-*.log
+# misc
 .DS_Store
-Thumbs.db
+.vscode/
+.idea/
+*.log

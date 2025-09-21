@@ -1,33 +1,25 @@
 ﻿from __future__ import annotations
-
 import json
 import logging
 import os
 import re
 import traceback
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any
-
 import base64
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 from uuid import uuid4
 import mimetypes
 import base64
-
-
-
 import google.genai as genai
 from google.genai import types
-
 from io import BytesIO
 from PIL import Image
 
@@ -40,62 +32,54 @@ logger = logging.getLogger(__name__)
 PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 GCP_GLOBAL_LOCATION = os.getenv("GCP_GLOBAL_LOCATION", "global")
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 ENABLE_LIVE = os.getenv("ENABLE_LIVE_SERVICES", "false").lower() == "true"
 MAX_GEMINI_ATTEMPTS = 3
 
 app = FastAPI(title="Trip Planner API", version="0.1.0")
 
-# Import and include weather router
 try:
     from .weather import router as weather_router
 except ImportError:
     from weather import router as weather_router
 app.include_router(weather_router)
 
-# Import and include city images router
 try:
     from .city_images import router as city_images_router
 except ImportError:
     from city_images import router as city_images_router
 app.include_router(city_images_router)
 
-# Import and include AI image generation router
 try:
     from .ai_image_generation import router as ai_image_router
 except ImportError:
     from ai_image_generation import router as ai_image_router
 app.include_router(ai_image_router)
 
-# Import and include smart tips router
 try:
     from .smart_tips import router as smart_tips_router
 except ImportError:
     from smart_tips import router as smart_tips_router
 app.include_router(smart_tips_router)
 
-# Import and include translate router
 try:
     from .translate import router as translate_router
 except ImportError:
     from translate import router as translate_router
 app.include_router(translate_router)
 
-# Import and include geocode router
 try:
     from .geocode import router as geocode_router
 except ImportError:
     from geocode import router as geocode_router
 app.include_router(geocode_router)
 
-# Import and include weather summary router
 try:
     from .weather_summary import router as weather_summary_router
 except ImportError:
     from weather_summary import router as weather_summary_router
 app.include_router(weather_summary_router)
 
-# Import and include directions router
 try:
     from .directions import router as directions_router
 except ImportError:
@@ -106,7 +90,6 @@ STATIC_DIR = Path("static")
 GEN_DIR = STATIC_DIR / "generated"
 GEN_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
 
 _cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
@@ -126,7 +109,6 @@ class TripPreferences(BaseModel):
     travellers: int = Field(ge=1, le=6)
     language: str = "English"
     enableLiveData: bool = True
-
     @field_validator("themes")
     @classmethod
     def ensure_themes(cls, value: list[str]) -> list[str]:
@@ -173,38 +155,95 @@ def build_base_payload(prefs: TripPreferences) -> dict[str, Any]:
         "costBreakdown": [],
     }
 
-def build_prompt(prefs: TripPreferences) -> str:
-    themes = ", ".join(prefs.themes)
+def _days_between_inclusive(a: str, b: str) -> int:
+    sa = date.fromisoformat(a)
+    sb = date.fromisoformat(b)
+    d = (sb - sa).days + 1
+    return max(1, d)
+
+def _system_instruction(prefs: TripPreferences, day_count: int) -> str:
+    t = ", ".join(prefs.themes)
     return (
-        "You are an Indian travel concierge creating detailed itineraries for real travellers.\n"
-        "Return ONLY a JSON object that matches this schema: {\n"
-        "  \"totalEstimatedCost\": number,\n"
-        "  \"weatherAdvisory\": string,\n"
-        "  \"costBreakdown\": [ { \"category\": string, \"amount\": number, \"notes\": string? } ],\n"
-        "  \"days\": [ {\n"
-        "      \"dateLabel\": string,\n"
-        "      \"summary\": string,\n"
-        "      \"activities\": [ {\n"
-        "          \"time\": string,\n"
-        "          \"title\": string,\n"
-        "          \"description\": string,\n"
-        "          \"cost\": number,\n"
-        "          \"location\": string,\n"
-        "          \"source\": string\n"
-        "      } ],\n"
-        "      \"accommodation\": { \"name\": string, \"cost\": number, \"notes\": string }?\n"
-        "  } ]\n"
-        "}.\n"
-        f"Trip requirements: plan a trip in {prefs.destination}, India for {prefs.travellers} travellers.\n"
-        f"Travel window: {prefs.startDate} to {prefs.endDate}.\n"
-        f"Total budget: {prefs.budget} INR.\n"
-        f"Focus themes: {themes or 'General discovery'}.\n"
-        f"All activities, accommodations, and locations must be within {prefs.destination} or its immediate neighbourhoods. Do not mention any other city.\n"
-        f"Ensure every activity.location explicitly includes {prefs.destination} or a recognised neighbourhood of {prefs.destination}.\n"
-        "If you cannot comply, return {\"error\": \"destination_mismatch\"} and nothing else.\n"
-        "Respond with STRICT JSON only, no backticks or commentary.\n"
-        "Mark each activity \"source\" as \"places-api\" when it references a real POI or \"ai\" otherwise.\n"
-        f"Return text in {prefs.language or 'English'} when describing activities.\n"
+        "Write terse JSON in English. Keep all strings short. "
+        "summary ≤ 32 words. title ≤ 10 words. description ≤ 32 words. "
+        "Use 24h times like 09:00. Costs are integers. "
+        f"Destination is {prefs.destination}, India only. "
+        "Mark source as \"places-api\" for real POIs, else \"ai\". "
+        f"Create exactly {day_count} days with 3–4 activities each."
+    )
+
+def _response_schema(day_count: int) -> dict:
+    return {
+        "type": "OBJECT",
+        "properties": {
+            "totalEstimatedCost": {"type": "NUMBER"},
+            "weatherAdvisory": {"type": "STRING"},
+            "costBreakdown": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "category": {"type": "STRING"},
+                        "amount": {"type": "NUMBER"},
+                        "notes": {"type": "STRING", "nullable": True},
+                    },
+                    "required": ["category", "amount"],
+                },
+                "maxItems": 5,
+            },
+            "days": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "dateLabel": {"type": "STRING"},
+                        "summary": {"type": "STRING"},
+                        "activities": {
+                            "type": "ARRAY",
+                            "items": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "time": {"type": "STRING", "format": "time"},
+                                    "title": {"type": "STRING"},
+                                    "description": {"type": "STRING"},
+                                    "cost": {"type": "NUMBER"},
+                                    "location": {"type": "STRING"},
+                                    "source": {"type": "STRING", "enum": ["places-api", "ai"]},
+                                },
+                                "required": ["time", "title", "description", "cost", "location", "source"],
+                            },
+                            "minItems": 3,
+                            "maxItems": 4,
+                        },
+                        "accommodation": {
+                            "type": "OBJECT",
+                            "nullable": True,
+                            "properties": {
+                                "name": {"type": "STRING"},
+                                "cost": {"type": "NUMBER"},
+                                "notes": {"type": "STRING"},
+                            },
+                            "required": ["name", "cost"],
+                        },
+                    },
+                    "required": ["dateLabel", "summary", "activities"],
+                },
+                "minItems": day_count,
+                "maxItems": day_count,
+            },
+        },
+        "required": ["totalEstimatedCost", "weatherAdvisory", "costBreakdown", "days"],
+        "propertyOrdering": ["totalEstimatedCost", "weatherAdvisory", "costBreakdown", "days"],
+    }
+
+def build_prompt(prefs: TripPreferences, day_count: int) -> str:
+    t = ", ".join(prefs.themes)
+    return (
+        f"Trip in {prefs.destination}, India for {prefs.travellers} travellers. "
+        f"Dates {prefs.startDate} to {prefs.endDate}. "
+        f"Budget {prefs.budget} INR. "
+        f"Themes {t or 'General'}. "
+        f"Language {prefs.language or 'English'}."
     )
 
 def extract_json_object(raw_text: str) -> str:
@@ -247,9 +286,6 @@ def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
 
 def _text_and_first_image_from_stream(stream) -> tuple[str, bytes | None]:
-    """
-    Returns (combined_text, first_image_bytes_or_None)
-    """
     texts = []
     img_bytes = None
     for chunk in stream:
@@ -262,21 +298,27 @@ def _text_and_first_image_from_stream(stream) -> tuple[str, bytes | None]:
                     img_bytes = inline.data
     return ("".join(texts), img_bytes)
 
-
 @app.post(f"{API_PREFIX}/itinerary")
 def generate_live_itinerary(request: ItineraryRequest = Body(...)):
     prefs = request.preferences
     itinerary = None
     meta = {}
     try:
+        day_count = _days_between_inclusive(prefs.startDate, prefs.endDate)
         client = _client()
+        sys_instruction = _system_instruction(prefs, day_count)
+        resp_schema = _response_schema(day_count)
+        token_cap = 8192
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[types.Content(role="user", parts=[types.Part.from_text(text=build_prompt(prefs))])],
+            model=MODEL_NAME,
+            contents=[types.Content(role="user", parts=[types.Part.from_text(text=build_prompt(prefs, day_count))])],
             config=types.GenerateContentConfig(
-                temperature=0.7,
-                top_p=0.9,
-                max_output_tokens=8192,
+                system_instruction=sys_instruction,
+                temperature=0.4,
+                top_p=0.8,
+                max_output_tokens=token_cap,
+                response_mime_type="application/json",
+                response_schema=resp_schema,
                 safety_settings=[
                     types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
                     types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
@@ -295,27 +337,26 @@ def generate_live_itinerary(request: ItineraryRequest = Body(...)):
             raw_text = "".join(raw_chunks)
         if not raw_text:
             raise ValueError("Gemini returned an empty response")
-        cleaned_text = extract_json_object(raw_text)
-        if cleaned_text is None:
-            raise ValueError("Gemini response did not contain JSON")
-        itinerary = json.loads(cleaned_text)
-        # Ensure destination and budget are always present
+        try:
+            itinerary = json.loads(raw_text)
+        except Exception:
+            cleaned_text = extract_json_object(raw_text)
+            if cleaned_text is None:
+                raise ValueError("Gemini response did not contain JSON")
+            itinerary = json.loads(cleaned_text)
         itinerary["destination"] = f"{prefs.destination}, India"
         itinerary["budget"] = prefs.budget
         itinerary["currency"] = "INR"
         itinerary["createdAt"] = datetime.utcnow().isoformat()
-        meta = {"source": "gemini"}
+        meta = {"source": "gemini", "mode": "structured"}
     except Exception as exc:
         logger.error("Gemini itinerary generation failed: %s", exc, exc_info=True)
         itinerary = build_base_payload(prefs)
         meta = {"source": "template", "error": str(exc)}
-
-    # Add static city images to the itinerary
     try:
         from .city_images import CITY_IMAGES
         itinerary["image_urls"] = CITY_IMAGES.get(prefs.destination, [])
     except Exception as e:
         logger.error(f"Failed to get city images: {e}")
-
     itinerary["meta"] = meta
     return JSONResponse(itinerary)

@@ -198,7 +198,7 @@ export function ItineraryForm({ onSubmit, isSubmitting, status, lastError }: Iti
           <button type="submit" className="btn btn--primary" disabled={isDisabled}>
             {isSubmitting ? (
               <span className="btn-loading">
-                <FaSpinner className="spinner" />
+                <span className="spinner"><FaSpinner /></span>
                 Crafting itinerary…
               </span>
             ) : (
