@@ -6,7 +6,11 @@ from search_client import search_images
 
 router = APIRouter()
 
-API_PREFIX = "/api/v1"
+try:
+    from .main import API_PREFIX  # type: ignore
+except ImportError:
+    from main import API_PREFIX  # type: ignore
+
 @router.get(f"{API_PREFIX}/city-images")
 def get_city_images(city: str = Query(..., description="Destination city"), num: int = Query(6, ge=1, le=10)):
     query = f"{city} travel photography"

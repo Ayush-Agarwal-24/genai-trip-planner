@@ -7,7 +7,10 @@ GOOGLE_MAPS_API_KEY = os.getenv("MAPS_API_KEY")
 GOOGLE_MAPS_BASE = "https://maps.googleapis.com/maps/api"
 
 router = APIRouter()
-API_PREFIX = "/api/v1"
+try:
+    from .main import API_PREFIX  # type: ignore
+except ImportError:
+    from main import API_PREFIX  # type: ignore
 
 @router.post(f"{API_PREFIX}/directions")
 def get_directions(
