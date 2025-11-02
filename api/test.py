@@ -8,7 +8,6 @@ from google import genai
 from google.genai.types import GenerateContentConfig, Modality
 from PIL import Image, UnidentifiedImageError
 
-# Load .env (override ensures values win even if already set)
 load_dotenv()
 
 project = os.getenv("GCP_PROJECT_ID")

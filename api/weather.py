@@ -228,4 +228,5 @@ def weather_search(
     num: int = Query(5, ge=1, le=10),
 ):
     results = search_web(f"{city} weather forecast", num=num)
+    results = search_web(f"{city} weather forecast", num=num)
     return JSONResponse({"city": city, "results": results})

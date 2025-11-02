@@ -7,6 +7,7 @@ type VoiceModeOverlayProps = {
   disabled: boolean;
   onApplyItinerary: (next: Itinerary) => void;
   onClose: () => void;
+  onItineraryReady?: () => void;
 };
 
 type VoiceMessage = {
@@ -76,7 +77,7 @@ function uniqueId() {
   return Math.random().toString(36).slice(2);
 }
 
-export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose }: VoiceModeOverlayProps) {
+export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose, onItineraryReady }: VoiceModeOverlayProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -167,6 +168,15 @@ export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose }: VoiceM
         }
         if (payload.complete) {
           setSessionComplete(true);
+        }
+        // If itinerary is ready and session is complete, notify host to show the overlay.
+        if (payload.itinerary && payload.complete) {
+          try {
+            onItineraryReady?.();
+          } catch (e) {
+            // non-fatal UI callback error
+            console.warn('onItineraryReady callback failed', e);
+          }
         }
       } catch (err) {
         console.error(err);

@@ -641,6 +641,25 @@ body {
   gap: 0.75rem;
 }
 
+/* Expanded features */
+.features-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin: 0.5rem 0 1.25rem;
+}
+
+.feature-card {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  padding: 1rem 1.1rem;
+}
+
+.feature-card h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+.feature-card p { margin: 0 0 0.5rem; color: var(--text-muted); }
+.feature-card ul { margin: 0; padding-left: 1.1rem; color: rgba(226,232,240,0.85); }
+
 .skeleton-line {
   height: 10px;
   background: rgba(148, 163, 184, 0.18);

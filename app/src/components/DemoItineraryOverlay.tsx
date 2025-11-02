@@ -27,7 +27,7 @@ export const DemoItineraryOverlay: React.FC<DemoItineraryOverlayProps> = ({ visi
         <button type="button" className="preview-modal__close" onClick={onClose} aria-label="Close demo">
           X
         </button>
-        <h3 style={{ marginBottom: '0.5rem' }}>Demo Itinerary (Hardcoded)</h3>
+        <h3 style={{ marginBottom: '0.5rem' }}>Demo Itinerary</h3>
         <p className="muted" style={{ marginTop: 0 }}>{itinerary.destination}</p>
 
         <div className="preview-card__stats" style={{ marginTop: '0.75rem', marginBottom: '1rem' }}>

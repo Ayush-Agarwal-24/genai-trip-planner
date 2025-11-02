@@ -191,7 +191,7 @@ def _parse_slot_value(slot: str, utterance: str) -> Optional[Any]:
         if digits:
             amount = int("".join(digits))
             if amount < 5000:
-                amount *= 100  # assume spoken in thousands
+                amount *= 100
             return max(10000, amount)
         return None
     if slot == "themes":
@@ -239,7 +239,7 @@ def _build_preferences(session: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _generate_itinerary(pref_dict: Dict[str, Any]) -> Dict[str, Any]:
-    from main import TripPreferences, ItineraryRequest, generate_live_itinerary  # lazy import to avoid cycle
+    from main import TripPreferences, ItineraryRequest, generate_live_itinerary
 
     preferences = TripPreferences(**pref_dict)
     request = ItineraryRequest(preferences=preferences)

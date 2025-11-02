@@ -7,7 +7,6 @@ import re
 import traceback
 from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Set, Tuple
-from dotenv import load_dotenv
 from fastapi import FastAPI, Body, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -17,8 +16,23 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from uuid import uuid4
 import mimetypes
+
+from dotenv import load_dotenv
+
 import google.genai as genai
 from google.genai import types
+
+load_dotenv()
+
+os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.getenv("GCP_PROJECT_ID", ""))
+os.environ.setdefault(
+    "GOOGLE_CLOUD_LOCATION",
+    os.getenv("GCP_GLOBAL_LOCATION") or os.getenv("GCP_LOCATION") or "global",
+)
+os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")  # tell SDK to use Vertex AI
+
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
 
 API_PREFIX = "/api/v1"
 load_dotenv()
@@ -31,7 +45,7 @@ LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 GCP_GLOBAL_LOCATION = os.getenv("GCP_GLOBAL_LOCATION", "global")
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 ENABLE_LIVE = os.getenv("ENABLE_LIVE_SERVICES", "false").lower() == "true"
-MAX_GEMINI_ATTEMPTS = 3
+MAX_GEMINI_ATTEMPTS = 1
 
 app = FastAPI(title="Trip Planner API", version="0.1.0")
 
@@ -396,8 +410,8 @@ class ItineraryRequest(BaseModel):
 class ImageGenerationRequest(BaseModel):
     prompt: str
 
-def _client() -> genai.Client:
-    return genai.Client(vertexai=True, project=PROJECT_ID, location=GCP_GLOBAL_LOCATION)
+
+client = genai.Client(http_options=types.HttpOptions(api_version="v1"))
 
 def build_base_payload(prefs: TripPreferences) -> dict[str, Any]:
     return {
@@ -636,17 +650,71 @@ def _system_instruction(prefs: TripPreferences, day_count: int) -> str:
     )
 
 def _response_schema(_day_count: int) -> dict:
+    # Constrain nested shapes so the model returns valid objects for days and activities
     return {
         "type": "OBJECT",
         "properties": {
             "destination": {"type": "STRING"},
             "budget": {"type": "NUMBER"},
             "currency": {"type": "STRING"},
-            "totalEstimatedCost": {"type": "NUMBER"},
-            "weatherAdvisory": {"type": "STRING"},
-            "costBreakdown": {"type": "ARRAY"},
-            "days": {"type": "ARRAY"},
-            "meta": {"type": "OBJECT"},
+            "totalEstimatedCost": {"type": "NUMBER", "nullable": True},
+            "weatherAdvisory": {"type": "STRING", "nullable": True},
+            "costBreakdown": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "category": {"type": "STRING"},
+                        "amount": {"type": "NUMBER"},
+                        "notes": {"type": "STRING", "nullable": True},
+                    },
+                    "required": ["category", "amount"],
+                },
+            },
+            "days": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "dateLabel": {"type": "STRING", "nullable": True},
+                        "date": {"type": "STRING", "nullable": True},
+                        "summary": {"type": "STRING"},
+                        "activities": {
+                            "type": "ARRAY",
+                            "items": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "time": {"type": "STRING"},
+                                    "title": {"type": "STRING"},
+                                    "description": {"type": "STRING"},
+                                    "location": {"type": "STRING"},
+                                    "cost": {"type": "NUMBER"},
+                                    "source": {"type": "STRING"},
+                                },
+                                "required": [
+                                    "time",
+                                    "title",
+                                    "description",
+                                    "location",
+                                    "cost",
+                                    "source",
+                                ],
+                            },
+                        },
+                        "accommodation": {
+                            "type": "OBJECT",
+                            "nullable": True,
+                            "properties": {
+                                "name": {"type": "STRING"},
+                                "cost": {"type": "NUMBER", "nullable": True},
+                                "notes": {"type": "STRING", "nullable": True},
+                            },
+                        },
+                    },
+                    "required": ["summary", "activities"],
+                },
+            },
+            "meta": {"type": "OBJECT", "nullable": True},
         },
         "required": ["destination", "budget", "currency", "days"],
     }
@@ -967,6 +1035,8 @@ def extract_json_object(raw_text: str) -> str:
     if not raw_text:
         raise ValueError("Empty response from model")
     text = raw_text.strip()
+    open("logs/raw_llm.jsonl", "a", encoding="utf-8").write(json.dumps({"ts": datetime.utcnow().isoformat(), "text": raw_text}, ensure_ascii=False) + "\n")
+    print(text)
     try:
         if text.startswith('```'):
             text = re.sub(r'^```(?:json)?', '', text, flags=re.IGNORECASE).strip()
@@ -1022,24 +1092,23 @@ def generate_live_itinerary(request: ItineraryRequest = Body(...)):
     meta = {}
     try:
         day_count = _days_between_inclusive(prefs.startDate, prefs.endDate)
-        client = _client()
         base_instruction = _system_instruction(prefs, day_count)
         strict_instruction = (
             base_instruction
             + " Every day MUST contain 3-4 activities and each activity MUST include title, description, location, cost (integer or descriptive string), and source."
         )
         resp_schema = _response_schema(day_count)
-        token_cap = 8192
-
-        attempts = 0
+        token_cap = 20000
         last_error: str | None = None
-        while attempts < MAX_GEMINI_ATTEMPTS:
-            instruction = base_instruction if attempts == 0 else strict_instruction
+
+        for attempt in range(MAX_GEMINI_ATTEMPTS):
+            instruction = base_instruction if attempt == 0 else strict_instruction
             response = client.models.generate_content(
                 model=MODEL_NAME,
                 contents=[types.Content(role="user", parts=[types.Part.from_text(text=build_prompt(prefs, day_count))])],
                 config=types.GenerateContentConfig(
                     system_instruction=instruction,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                     temperature=0.4,
                     top_p=0.8,
                     max_output_tokens=token_cap,
@@ -1063,22 +1132,25 @@ def generate_live_itinerary(request: ItineraryRequest = Body(...)):
                 raw_text = "".join(raw_chunks)
             if not raw_text:
                 last_error = "Gemini returned an empty response"
-                attempts += 1
                 continue
             try:
                 itinerary = json.loads(raw_text)
             except Exception:
-                cleaned_text = extract_json_object(raw_text)
-                if cleaned_text is None:
-                    last_error = "Gemini response did not contain valid JSON"
-                    attempts += 1
+                try:
+                    cleaned_text = extract_json_object(raw_text)
+                except Exception as e:
+                    last_error = f"Parse failure on attempt {attempt + 1}: {e}"
                     continue
-                itinerary = json.loads(cleaned_text)
-
+                try:
+                    itinerary = json.loads(cleaned_text)
+                except Exception as e:
+                    last_error = f"JSON load failure on attempt {attempt + 1}: {e}"
+                    continue
             itinerary["destination"] = f"{prefs.destination}, India"
             itinerary["budget"] = prefs.budget
             itinerary["currency"] = "INR"
             itinerary["createdAt"] = datetime.utcnow().isoformat()
+            break
 
         if itinerary is None:
             raise ValueError(last_error or "Failed to generate a complete itinerary")
@@ -1127,7 +1199,6 @@ def _persist_itinerary(
 @app.get(f"{API_PREFIX}/suggest-hotels")
 def suggest_hotels(city: str, start_date: str, end_date: str, budget: int = 0, travellers: int = 2, itinerary_id: str | None = None):
     try:
-        client = _client()
         try:
             nights = (datetime.fromisoformat(end_date) - datetime.fromisoformat(start_date)).days
             nights = nights if nights > 0 else 1
@@ -1167,6 +1238,7 @@ def suggest_hotels(city: str, start_date: str, end_date: str, budget: int = 0, t
             contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 response_schema=schema,
                 temperature=0.4,
                 top_p=0.8,
@@ -1240,7 +1312,6 @@ def suggest_flights(
     budget: int | None = None,
 ):
     try:
-        client = _client()
         flight_schema = {
             "type": "ARRAY",
             "items": {
@@ -1277,6 +1348,7 @@ def suggest_flights(
             contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                 response_schema=flight_schema,
                 temperature=0.4,
                 top_p=0.8,
@@ -1337,7 +1409,6 @@ def suggest_fashion(
     budget: int | None = None,
 ):
     try:
-        client = _client()
         schema = {
             "type": "OBJECT",
             "properties": {
@@ -1379,6 +1450,7 @@ def suggest_fashion(
                 contents=[types.Content(role="user", parts=[types.Part.from_text(text=instruction_prompt)])],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
                     response_schema=schema,
                     temperature=0.4,
                     top_p=0.8,

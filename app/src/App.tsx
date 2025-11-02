@@ -6,6 +6,7 @@ import { PlannerOverlay } from './components/PlannerOverlay';
 import { demoItinerary } from './demo/demoItinerary';
 
 import { VoiceModeOverlay } from './components/VoiceModeOverlay';
+import { ItineraryOverlay } from './components/ItineraryOverlay';
 import './styles/global.css';
 
 type RequestState = 'idle' | 'loading' | 'success' | 'error';
@@ -148,6 +149,7 @@ function App() {
   const [voiceMode, setVoiceMode] = useState<boolean>(false);
   const [showDemo, setShowDemo] = useState<boolean>(false);
   const [showPlanner, setShowPlanner] = useState<boolean>(false);
+  const [showItinerary, setShowItinerary] = useState<boolean>(false);
 
   const handlePlanTrip = async (prefs: TripPreferences) => {
     setPreferences(prefs);
@@ -173,6 +175,10 @@ function App() {
       setItinerary(data);
       setError(backendError);
       setRequestState(backendError ? 'error' : 'success');
+      if (!backendError) {
+        setShowPlanner(false);
+        setShowItinerary(true);
+      }
 
       // if (!backendError) {
       //   void fetchDestinationHero(data.destination, prefs.enableLiveData);
@@ -201,9 +207,9 @@ function App() {
       <section className="hero">
         <div className="hero__content">
           <p className="hero__eyebrow">AI TRAVEL PLANNER</p>
-          <h1 className="hero__title">Plan smarter trips with Ava</h1>
+          <h1 className="hero__title">Plan smarter trips with AI travel planner</h1>
           <p className="hero__subtitle">
-            Turn your dates, budget, and interests into a readyâ€‘toâ€‘go itinerary â€” complete with
+            Turn your dates, budget, and interests into a ready-to-go itinerary & complete with
             photos, weather, and local tips.
           </p>
           <div>
@@ -211,7 +217,7 @@ function App() {
               type="button"
               className="btn btn--primary"
               onClick={() => {
-                const el = document.getElementById('planner');
+                const el = document.getElementById('actions');
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
             >
@@ -221,12 +227,69 @@ function App() {
         </div>
       </section>
       {/* Action bar (menu style) */}
-      <section style={{ display: 'flex', justifyContent: 'center' }}>
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+
+      {/* Info band */}
+      
+      {/* Planner and preview render in overlays only. */}
+      <section className="panel panel--preview">
+        {requestState === 'loading' ? (
+          <div className="preview-skeleton">
+            <div className="skeleton-line" />
+            <div className="skeleton-block" />
+          </div>
+        ) : null}
+
+        <div className="features-grid">
+          <article className="feature-card">
+            <h3>Weather-aware planning</h3>
+            <p>Daily forecasts shape your days. If rain hits, we swap in indoor gems automatically.</p>
+            <ul>
+              <li>Live outlook per day</li>
+              <li>Smart indoor/outdoor shuffle</li>
+              <li>Morning/afternoon comfort tips</li>
+            </ul>
+          </article>
+          <article className="feature-card">
+            <h3>Personalized to you</h3>
+            <p>Pick themes like Heritage, Food, or Adventure. Set a budget and we keep you on track.</p>
+            <ul>
+              <li>Budget guardrails</li>
+              <li>Theme-weighted days</li>
+              <li>Family, Solo, Luxury presets</li>
+            </ul>
+          </article>
+          <article className="feature-card">
+            <h3>AI concierge, Ava</h3>
+            <p>Talk to Ava to tweak the plan hands-free. Change days, swap activities, or ask for chill options.</p>
+            <ul>
+              <li>Natural voice chat</li>
+              <li>Applies changes instantly</li>
+              <li>Multilingual replies</li>
+            </ul>
+          </article>
+          <article className="feature-card">
+            <h3>Share & export</h3>
+            <p>One-click sharing with costs and tips. Export a memory-ready plan to review anytime.</p>
+            <ul>
+              <li>Cost breakdown</li>
+              <li>Local hacks & etiquette</li>
+              <li>Lightweight PDF export</li>
+            </ul>
+          </article>
+        </div>
+
+        <div className="info-band">
+          <div className="info-band__item"><strong>&lt;10s</strong><span>to first plan</span></div>
+          <div className="info-band__item"><strong>8+</strong><span>themes supported</span></div>
+          <div className="info-band__item"><strong>Multilingual</strong><span>English + Indian langs</span></div>
+          <div className="info-band__item"><strong>Offline demo</strong><span>no API needed</span></div>
+        </div>
+
+        <div id="actions" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center', marginTop: '0.5rem' }}>
           <button
             type="button"
             className="btn btn--demo"
-            title="Open a sample 3â€‘day plan (no AI calls)"
+            title="Open a sample 3-day plan (no AI calls)"
             onClick={() => setShowDemo(true)}
           >
             Show Demo Plan
@@ -237,7 +300,7 @@ function App() {
             title="Start voice planning with Ava"
             onClick={() => {
               if (!voiceAvailable) {
-                alert('Voice mode needs a browser with Speech Recognition and Speech Synthesis support.');
+                alert('Voice mode needs a browser with microphone support.');
                 return;
               }
               setVoiceMode((prev) => !prev);
@@ -251,34 +314,9 @@ function App() {
             title="Open the planner to generate an itinerary"
             onClick={() => setShowPlanner(true)}
           >
-            Open Planner
+            Generate Itinerary
           </button>
         </div>
-      </section>
-
-      {/* Info band */}
-      <section className="info-band">
-        <div className="info-band__item"><strong>&lt;10s</strong><span>to first plan</span></div>
-        <div className="info-band__item"><strong>Weather-aware</strong><span>smart adjustments</span></div>
-        <div className="info-band__item"><strong>Multilingual</strong><span>translate your itinerary</span></div>
-        <div className="info-band__item"><strong>Offline demo</strong><span>try without API calls</span></div>
-      </section>
-      {/* Planner is overlay only */}
-      <section className="panel panel--preview">
-        {requestState === 'loading' ? (
-          <div className="preview-skeleton">
-            <div className="skeleton-line" />
-            <div className="skeleton-block" />
-          </div>
-        ) : (
-          <ItineraryPreview
-            itinerary={itinerary}
-            requestState={requestState}
-            setItinerary={setItinerary}
-            preferences={preferences}
-            voiceMode={voiceMode}
-          />
-        )}
       </section>
       {voiceMode ? (
         <VoiceModeOverlay
@@ -287,8 +325,18 @@ function App() {
           disabled={requestState === 'loading'}
           onClose={() => setVoiceMode(false)}
           onApplyItinerary={setItinerary}
+          onItineraryReady={() => setShowItinerary(true)}
         />
       ) : null}
+      <ItineraryOverlay
+        visible={showItinerary}
+        onClose={() => setShowItinerary(false)}
+        itinerary={itinerary}
+        requestState={requestState}
+        setItinerary={setItinerary}
+        preferences={preferences}
+        voiceMode={voiceMode}
+      />
       <DemoItineraryOverlay visible={showDemo} onClose={() => setShowDemo(false)} itinerary={demoItinerary} />
       <PlannerOverlay
         visible={showPlanner}
@@ -303,6 +351,7 @@ function App() {
 }
 
 export default App;
+
 
 
 
