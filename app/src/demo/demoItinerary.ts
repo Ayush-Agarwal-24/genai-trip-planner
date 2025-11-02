@@ -25,7 +25,7 @@ export const demoItinerary: Itinerary = {
           description: 'Explore courtyards and mirrorwork; start early to beat queues.',
           cost: 1200,
           location: 'Amber Fort, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
         {
           time: '13:00',
@@ -33,7 +33,7 @@ export const demoItinerary: Itinerary = {
           description: 'Iconic stepwell photo stop and short stroll nearby.',
           cost: 0,
           location: 'Panna Meena Ka Kund, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
         {
           time: '17:00',
@@ -41,7 +41,7 @@ export const demoItinerary: Itinerary = {
           description: 'City vistas at golden hour; tea and kachori at the viewpoint.',
           cost: 300,
           location: 'Nahargarh Fort, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
       ],
       accommodation: {
@@ -60,7 +60,7 @@ export const demoItinerary: Itinerary = {
           description: 'Royal textiles and arms; optional royal courtyard ticket.',
           cost: 1500,
           location: 'City Palace, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
         {
           time: '13:30',
@@ -68,7 +68,7 @@ export const demoItinerary: Itinerary = {
           description: 'Facade from across the street cafe balconies; quick refreshment.',
           cost: 200,
           location: 'Hawa Mahal Road, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
         {
           time: '16:30',
@@ -76,7 +76,7 @@ export const demoItinerary: Itinerary = {
           description: 'Lassi, kachori, and kulfi as you browse handicrafts.',
           cost: 700,
           location: 'Johari & Bapu Bazaar, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
       ],
     },
@@ -90,7 +90,7 @@ export const demoItinerary: Itinerary = {
           description: 'Quiet streets and pastel gates before traffic picks up.',
           cost: 0,
           location: 'Ajmeri Gate to Chandpol Gate, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
         {
           time: '11:00',
@@ -98,7 +98,7 @@ export const demoItinerary: Itinerary = {
           description: 'Learn traditional techniques; take home your printed tote.',
           cost: 1800,
           location: 'Anokhi Workshop, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
         {
           time: '14:00',
@@ -106,11 +106,11 @@ export const demoItinerary: Itinerary = {
           description: 'Local thali or light bites before departure.',
           cost: 600,
           location: 'C-Scheme, Jaipur',
-          source: 'demo',
+          source: 'mock',
         },
       ],
     },
   ],
-  meta: { source: 'demo' },
+  meta: { source: 'mock' },
 };
 

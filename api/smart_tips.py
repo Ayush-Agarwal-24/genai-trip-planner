@@ -24,7 +24,12 @@ client = genai.Client(http_options=types.HttpOptions(api_version="v1"))
 
 router = APIRouter()
 
-@router.get("/api/v1/smart-tips")
+try:
+    from .main import API_PREFIX  # type: ignore
+except ImportError:
+    from main import API_PREFIX  # type: ignore
+
+@router.get(f"{API_PREFIX}/smart-tips")
 def get_smart_tips(
     destination: str = Query(..., description="Destination city"),
     themes: str = Query("", description="Comma-separated list of themes")

@@ -68,11 +68,11 @@ function playAudio(audioBase64?: string | null) {
   // Slightly slower playback for clarity; preserve pitch if supported.
   try {
     audio.playbackRate = 0.96;
-    // @ts-expect-error preservesPitch is not in the TS lib by default
+    (speechSynthesis as any).preservesPitch = true;
     if ('preservesPitch' in audio) (audio as any).preservesPitch = true;
-    // @ts-expect-error webkitPreservesPitch is not in the TS lib by default
+    (speechSynthesis as any).webkitPreservesPitch = true;
     if ('webkitPreservesPitch' in audio) (audio as any).webkitPreservesPitch = true;
-    // @ts-expect-error mozPreservesPitch is not in the TS lib by default
+    (speechSynthesis as any).mozPreservesPitch = true;
     if ('mozPreservesPitch' in audio) (audio as any).mozPreservesPitch = true;
   } catch {}
   void audio.play().catch((error) => {
@@ -116,33 +116,33 @@ export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose, onItiner
   }, []);
 
   function playAssistantResponse(text: string, audioBase64?: string | null) {
-    // Prefer client TTS for natural prosody when available; fallback to server MP3.
-    if (BROWSER_TTS_SUPPORTED && text) {
-      try {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.95; // slightly slower
-        utterance.pitch = 1.05; // a touch warmer
-        window.speechSynthesis.speak(utterance);
-        return;
-      } catch (e) {
-        console.warn('Client TTS failed, falling back to audio', e);
-      }
-    }
-    // Fallback to server-provided audio
-    if (audioBase64) {
-      const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
-      try {
-        audio.playbackRate = 0.96;
-        // @ts-expect-error preservesPitch family
-        if ('preservesPitch' in audio) (audio as any).preservesPitch = true;
-      } catch {}
-      lastAudioRef.current = audio;
-      void audio.play().catch((error) => {
-        console.warn('Audio playback failed', error);
-      });
-    }
+  if (BROWSER_TTS_SUPPORTED && text) {
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      (utterance as any).preservesPitch = true;
+      (speechSynthesis as any).preservesPitch = true;
+      (speechSynthesis as any).webkitPreservesPitch = true;
+      (speechSynthesis as any).mozPreservesPitch = true;
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
+      window.speechSynthesis.speak(utterance);
+      return;
+    } catch {}
   }
+  if (audioBase64) {
+    const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+    try {
+      audio.playbackRate = 0.96;
+      (audio as any).preservesPitch = true;
+      (audio as any).webkitPreservesPitch = true;
+      (audio as any).mozPreservesPitch = true;
+    } catch {}
+    lastAudioRef.current = audio;
+    void audio.play().catch(() => {});
+  }
+}
+
 
   const startSession = useCallback(async () => {
     if (!MICROPHONE_SUPPORTED) {

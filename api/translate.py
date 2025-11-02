@@ -23,7 +23,12 @@ MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 client = genai.Client(http_options=types.HttpOptions(api_version="v1"))
 
 router = APIRouter()
-@router.post("/api/v1/translate-itinerary")
+try:
+    from .main import API_PREFIX  # type: ignore
+except ImportError:
+    from main import API_PREFIX  # type: ignore
+
+@router.post(f"{API_PREFIX}/translate-itinerary")
 def translate_itinerary(
     itinerary: dict = Body(...),
     target_language: str = Body(...)

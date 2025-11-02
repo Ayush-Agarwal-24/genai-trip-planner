@@ -27,7 +27,12 @@ client = genai.Client(http_options=types.HttpOptions(api_version="v1"))
 
 router = APIRouter()
 
-@router.post("/api/v1/weather-summary")
+try:
+    from .main import API_PREFIX  # type: ignore
+except ImportError:
+    from main import API_PREFIX  # type: ignore
+
+@router.post(f"{API_PREFIX}/weather-summary")
 def get_weather_summary(
     weather_data: dict = Body(...)
 ):

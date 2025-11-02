@@ -115,8 +115,7 @@ def _synthesize(text: str) -> str:
         )
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
-            speaking_rate=0.95,
-            pitch=1.0,
+            speaking_rate=1.02,
         )
         response = _tts().synthesize_speech(
             input=synthesis_input,
@@ -163,10 +162,7 @@ def _parse_slot_value(slot: str, utterance: str) -> Optional[Any]:
         return None
     lower = utterance.lower()
     if slot in {"origin", "destination"}:
-        # Trim stray leading/trailing punctuation that STT may include (e.g., trailing period).
-        cleaned = re.sub(r"^[\s\-–—\.,;:!?]+|[\s\.,;:!?]+$", "", utterance)
-        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
-        return cleaned.title()
+        return utterance.title()
     if slot in {"start_date", "end_date"}:
         try:
             date_value = date_parser.parse(utterance, fuzzy=True).date()
@@ -277,7 +273,12 @@ def _ensure_session(session_id: str) -> Dict[str, Any]:
     return session
 
 
-@router.post("/api/v1/voice/session/start")
+try:
+    from .main import API_PREFIX  # type: ignore
+except ImportError:
+    from main import API_PREFIX  # type: ignore
+
+@router.post(f"{API_PREFIX}/voice/session/start")
 def start_voice_session():
     _cleanup_sessions()
     session_id = uuid4().hex
@@ -310,7 +311,7 @@ def start_voice_session():
     )
 
 
-@router.post("/api/v1/voice/session/{session_id}/transcribe")
+@router.post(f"{API_PREFIX}/voice/session/{{session_id}}/transcribe")
 def transcribe_audio(session_id: str = Path(...), payload: Dict[str, Any] = Body(...)):
     _ensure_session(session_id)
     audio_b64 = payload.get("audio")
@@ -318,7 +319,7 @@ def transcribe_audio(session_id: str = Path(...), payload: Dict[str, Any] = Body
     return JSONResponse({"transcript": transcript})
 
 
-@router.post("/api/v1/voice/session/{session_id}/message")
+@router.post(f"{API_PREFIX}/voice/session/{{session_id}}/message")
 def voice_session_message(session_id: str = Path(...), payload: Dict[str, Any] = Body(...)):
     session = _ensure_session(session_id)
     if session.get("complete"):

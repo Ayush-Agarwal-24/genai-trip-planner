@@ -1114,8 +1114,7 @@ export function ItineraryPreview({ itinerary, requestState, setItinerary, prefer
                             height: typeof img?.height === 'number' ? img.height : undefined,
                           } as MoodboardImage;
                         })
-                        .filter((img): img is MoodboardImage => Boolean(img?.src));
-
+                        .filter((img: unknown): img is MoodboardImage => Boolean((img as { src?: string })?.src));
                       const lookupImages = findActivityImages(rawLocation, rawTitle, location, title);
                       const gallery: MoodboardImage[] = [];
                       [...backendImages, ...lookupImages].forEach((img) => {

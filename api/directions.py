@@ -7,8 +7,9 @@ GOOGLE_MAPS_API_KEY = os.getenv("MAPS_API_KEY")
 GOOGLE_MAPS_BASE = "https://maps.googleapis.com/maps/api"
 
 router = APIRouter()
+API_PREFIX = "/api/v1"
 
-@router.post("/api/v1/directions")
+@router.post(f"{API_PREFIX}/directions")
 def get_directions(
     origin: dict = Body(...),
     destination: dict = Body(...),

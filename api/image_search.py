@@ -11,6 +11,11 @@ except ImportError:
 
 router = APIRouter()
 
+try:
+    from .main import API_PREFIX  # type: ignore
+except ImportError:
+    from main import API_PREFIX  # type: ignore
+
 
 def _first_image_or_404(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not results:
@@ -18,13 +23,13 @@ def _first_image_or_404(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     return results[0]
 
 
-@router.get("/api/v1/image-search")
+@router.get(f"{API_PREFIX}/image-search")
 def image_search(query: str = Query(..., description="Search query"), num: int = Query(6, ge=1, le=10)):
     images = search_images(query, num=num)
     return JSONResponse({"query": query, "images": images})
 
 
-@router.get("/api/v1/city-hero")
+@router.get(f"{API_PREFIX}/city-hero")
 def city_hero(city: str = Query(..., description="Destination city"), force: bool = False):
     """
     Return a hero-style image for the destination city using Google Programmable Search.
@@ -44,7 +49,7 @@ def city_hero(city: str = Query(..., description="Destination city"), force: boo
     return JSONResponse(payload)
 
 
-@router.post("/api/v1/itinerary-images")
+@router.post(f"{API_PREFIX}/itinerary-images")
 def itinerary_images(request: Dict[str, Any] = Body(...)):
     city = request.get("city")
     places = request.get("places") or []

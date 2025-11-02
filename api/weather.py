@@ -199,7 +199,12 @@ def _fetch_current_conditions(lat: float, lon: float) -> Dict[str, Any]:
     return condition
 
 
-@router.get("/api/v1/weather-forecast")
+try:
+    from .main import API_PREFIX  # type: ignore
+except ImportError:
+    from main import API_PREFIX  # type: ignore
+
+@router.get(f"{API_PREFIX}/weather-forecast")
 def weather_forecast(
     city: str = Query(..., description="Destination city"),
     days: int = Query(DEFAULT_FORECAST_DAYS, ge=1, le=10),
@@ -222,7 +227,7 @@ def weather_forecast(
         return JSONResponse({"error": str(exc)}, status_code=400)
 
 
-@router.get("/api/v1/weather-search")
+@router.get(f"{API_PREFIX}/weather-search")
 def weather_search(
     city: str = Query(..., description="Destination city"),
     num: int = Query(5, ge=1, le=10),
