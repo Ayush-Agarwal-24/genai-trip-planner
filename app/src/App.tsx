@@ -1,13 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { ItineraryForm } from './components/ItineraryForm';
 import { ItineraryPreview } from './components/ItineraryPreview';
-import { LiveStatusBanner, type LiveStatusVariant } from './components/LiveStatusBanner';
-import { ImageMoodBoard } from './components/ImageMoodBoard';
+import { DemoItineraryOverlay } from './components/DemoItineraryOverlay';
+import { PlannerOverlay } from './components/PlannerOverlay';
+import { demoItinerary } from './demo/demoItinerary';
+
+import { VoiceModeOverlay } from './components/VoiceModeOverlay';
 import './styles/global.css';
 
 type RequestState = 'idle' | 'loading' | 'success' | 'error';
-type ImageState = 'idle' | 'loading' | 'success' | 'error';
-
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
   (import.meta.env.API_BASE_URL as string | undefined) ??
@@ -53,6 +54,7 @@ export type ItineraryDay = {
 };
 
 export type Itinerary = {
+  id?: string;
   createdAt: string;
   destination: string;
   budget: number;
@@ -66,11 +68,12 @@ export type Itinerary = {
   }>;
   weatherAdvisory?: string;
   meta?: ItineraryMeta;
-  image_base64?: string;
   image_url?: string;
+  image_urls?: string[];
 };
 
 const seedItinerary: Itinerary = {
+  id: 'seed-itinerary',
   createdAt: new Date().toISOString(),
   destination: 'Jaipur, India',
   budget: 25000,
@@ -85,7 +88,7 @@ const seedItinerary: Itinerary = {
   ],
   days: [
     {
-      dateLabel: 'Day 1 – Heritage Trail',
+      dateLabel: 'Day 1 - Heritage Trail',
       summary: 'Kick-off with Jaipur classics and curated heritage dining.',
       activities: [
         {
@@ -125,65 +128,31 @@ const seedItinerary: Itinerary = {
   },
 };
 
-async function requestDestinationImage(prompt: string): Promise<string | null> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/generate-image`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ prompt }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Image generation failed (${response.status})`);
-    }
-
-    const payload: { image_base64?: string; image_url?: string } = await response.json();
-    if (payload.image_base64) {
-      return `data:image/png;base64,${payload.image_base64}`;
-    }
-    if (payload.image_url) {
-      return payload.image_url;
-    }
-  } catch (error) {
-    console.warn('Image generation error', error);
-  }
-  return null;
-}
-
 function App() {
   const [preferences, setPreferences] = useState<TripPreferences | null>(null);
-  const [itinerary, setItinerary] = useState<Itinerary>(seedItinerary);
+  // Start with an empty shell so main does not show any demo content by default
+  const emptyItinerary: Itinerary = {
+    id: 'empty-itinerary',
+    createdAt: new Date().toISOString(),
+    destination: '',
+    budget: 0,
+    totalEstimatedCost: 0,
+    currency: 'INR',
+    days: [],
+    costBreakdown: [],
+    meta: { source: 'template' },
+  };
+  const [itinerary, setItinerary] = useState<Itinerary>(emptyItinerary);
   const [requestState, setRequestState] = useState<RequestState>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [heroImage, setHeroImage] = useState<string | null>(null);
-  const [imageState, setImageState] = useState<ImageState>('idle');
-
-  // const fetchDestinationHero = useCallback(async (destination: string, enabled: boolean) => {
-  //   if (!enabled) {
-  //     setHeroImage(null);
-  //     setImageState('idle');
-  //     return;
-  //   }
-
-  //   setImageState('loading');
-  //   const prompt = `Cinematic travel photograph of ${destination}, India, golden hour, ultra-detailed, 16:9 ratio, vibrant colours, professional lighting`;
-  //   const image = await requestDestinationImage(prompt);
-  //   if (image) {
-  //     setHeroImage(image);
-  //     setImageState('success');
-  //   } else {
-  //     setHeroImage(null);
-  //     setImageState('error');
-  //   }
-  // }, []);
+  const [voiceMode, setVoiceMode] = useState<boolean>(false);
+  const [showDemo, setShowDemo] = useState<boolean>(false);
+  const [showPlanner, setShowPlanner] = useState<boolean>(false);
 
   const handlePlanTrip = async (prefs: TripPreferences) => {
     setPreferences(prefs);
     setRequestState('loading');
     setError(null);
-    setImageState('idle');
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/itinerary`, {
@@ -199,7 +168,6 @@ function App() {
       }
 
       const data: Itinerary = await response.json();
-      console.log("Received itinerary data from backend:", data); // Debug log
       const backendError = typeof data.meta?.error === 'string' ? data.meta.error : null;
 
       setItinerary(data);
@@ -215,59 +183,126 @@ function App() {
       const message = fetchError instanceof Error ? fetchError.message : 'Unexpected error';
       setError(message);
       setRequestState('error');
-      setHeroImage(null);
-      setImageState('error');
     }
   };
 
-  const bannerVariant: LiveStatusVariant = useMemo(() => {
-    if (requestState === 'error' && preferences?.enableLiveData) {
-      return 'error';
+  const voiceAvailable = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return false;
     }
-    if (itinerary.meta?.source === 'gemini') {
-      return 'live';
-    }
-    if (preferences?.enableLiveData) {
-      return 'template';
-    }
-    return 'idle';
-  }, [itinerary.meta?.source, preferences?.enableLiveData, requestState]);
-
-  const bannerMessage = useMemo(() => {
-    if (error) return error;
-    if (itinerary.meta?.source === 'gemini') return 'Powered by live Gemini + Maps data.';
-    if (preferences?.enableLiveData) return 'Showing the graceful fallback when live mode is unavailable.';
-    return 'Generate a live itinerary to see Gemini in action.';
-  }, [error, itinerary.meta?.source, preferences?.enableLiveData]);
-
-  const lastGenerated = itinerary?.createdAt ?? seedItinerary.createdAt;
+    const mediaSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    const recorderSupported = typeof window.MediaRecorder !== 'undefined';
+    return mediaSupported && recorderSupported;
+  }, []);
 
   return (
     <div className="page">
-      <section className="panel panel--form">
-        <ItineraryForm
-          onSubmit={handlePlanTrip}
-          isSubmitting={requestState === 'loading'}
-          status={requestState}
-          lastError={error}
-        />
+      {/* Welcome hero (no scroll required to understand the app) */}
+      <section className="hero">
+        <div className="hero__content">
+          <p className="hero__eyebrow">AI TRAVEL PLANNER</p>
+          <h1 className="hero__title">Plan smarter trips with Ava</h1>
+          <p className="hero__subtitle">
+            Turn your dates, budget, and interests into a readyâ€‘toâ€‘go itinerary â€” complete with
+            photos, weather, and local tips.
+          </p>
+          <div>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                const el = document.getElementById('planner');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              Get Started
+            </button>
+          </div>
+        </div>
       </section>
-        <section className="panel panel--preview">
-          {requestState === 'loading' ? (
-            <div className="preview-skeleton">
-              <div className="skeleton-line" />
-              <div className="skeleton-block" />
-            </div>
-          ) : (
-            <ItineraryPreview
-              itinerary={itinerary}
-              requestState={requestState}
-              setItinerary={setItinerary}
-            />
-          )}
-        </section>
+      {/* Action bar (menu style) */}
+      <section style={{ display: 'flex', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn--demo"
+            title="Open a sample 3â€‘day plan (no AI calls)"
+            onClick={() => setShowDemo(true)}
+          >
+            Show Demo Plan
+          </button>
+          <button
+            type="button"
+            className="btn btn--ava"
+            title="Start voice planning with Ava"
+            onClick={() => {
+              if (!voiceAvailable) {
+                alert('Voice mode needs a browser with Speech Recognition and Speech Synthesis support.');
+                return;
+              }
+              setVoiceMode((prev) => !prev);
+            }}
+          >
+            {voiceMode ? 'Ava Active' : 'Launch Ava'}
+          </button>
+          <button
+            type="button"
+            className="btn btn--primary"
+            title="Open the planner to generate an itinerary"
+            onClick={() => setShowPlanner(true)}
+          >
+            Open Planner
+          </button>
+        </div>
+      </section>
+
+      {/* Info band */}
+      <section className="info-band">
+        <div className="info-band__item"><strong>&lt;10s</strong><span>to first plan</span></div>
+        <div className="info-band__item"><strong>Weather-aware</strong><span>smart adjustments</span></div>
+        <div className="info-band__item"><strong>Multilingual</strong><span>translate your itinerary</span></div>
+        <div className="info-band__item"><strong>Offline demo</strong><span>try without API calls</span></div>
+      </section>
+      {/* Planner is overlay only */}
+      <section className="panel panel--preview">
+        {requestState === 'loading' ? (
+          <div className="preview-skeleton">
+            <div className="skeleton-line" />
+            <div className="skeleton-block" />
+          </div>
+        ) : (
+          <ItineraryPreview
+            itinerary={itinerary}
+            requestState={requestState}
+            setItinerary={setItinerary}
+            preferences={preferences}
+            voiceMode={voiceMode}
+          />
+        )}
+      </section>
+      {voiceMode ? (
+        <VoiceModeOverlay
+          itinerary={itinerary}
+          preferences={preferences}
+          disabled={requestState === 'loading'}
+          onClose={() => setVoiceMode(false)}
+          onApplyItinerary={setItinerary}
+        />
+      ) : null}
+      <DemoItineraryOverlay visible={showDemo} onClose={() => setShowDemo(false)} itinerary={demoItinerary} />
+      <PlannerOverlay
+        visible={showPlanner}
+        onClose={() => setShowPlanner(false)}
+        onSubmit={handlePlanTrip}
+        isSubmitting={requestState === 'loading'}
+        status={requestState}
+        lastError={error}
+      />
     </div>
   );
 }
 
 export default App;
+
+
+

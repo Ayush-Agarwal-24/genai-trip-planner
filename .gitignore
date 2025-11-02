@@ -4,6 +4,7 @@
 **/*.env*
 !docs/**/*.*
 !**/*.example
+/node_modules/
 
 # node / vite
 node_modules/
@@ -17,3 +18,4 @@ __pycache__/
 *.pyc
 *.pyo
 api/.venv/
+api/credentials/

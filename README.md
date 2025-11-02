@@ -4,11 +4,33 @@ This is a web application that helps you plan your trips with the power of AI. I
 
 ## Features
 
-*   **Personalized Itinerary Generation:** Get a custom-tailored itinerary based on your destination and preferences.
-*   **Interactive Map View:** Visualize your trip on a map.
-*   **Weather Forecast:** Get the latest weather information for your destination.
-*   **Image Mood Board:** Get a visual feel for your destination with an AI-generated image mood board.
-*   **Live Data Toggle:** Switch between using mock data and live data from Google's Gemini AI.
+* **Travel Readiness Compass:** Gemini enriches each itinerary with a live radar across budget fit, logistics, weather resilience, sustainability and theme alignment, complete with alerts and recommended next actions.
+* **Ava - Live Voice Mode:** A telecaller-style voice journey that captures all trip requirements via Google Cloud Speech and instantly produces a fresh itinerary.
+* **AI Trip Preview:** Launch a cinematic, narrated walkthrough of each day; the script is auto-generated and streams through the browser speech engine for showtime.
+* **Personalized Itinerary Generation:** Get a custom-tailored itinerary based on your destination and preferences.
+* **Interactive Map View:** Visualize your trip on a map.
+* **Weather Forecast:** Get the latest weather information for your destination.
+* **Image Mood Board:** Get a visual feel for your destination with an AI-generated image mood board.
+* **Live Data Toggle:** Switch between using mock data and live data from Google's Gemini AI.
+
+### Demo Script (3 minutes)
+
+1. Generate a live itinerary with the “Enable live data” toggle on.
+2. Scroll through the **Travel Readiness Compass** to highlight insights, alerts, and sustainability nudges.
+3. Open any day’s **AI Trip Preview**, play the narration, and call out the cinematic summary.
+4. Launch **Ava Voice Mode** and walk through the guided questionnaire (origin, destination, dates, travellers, budget, themes). Let the live itinerary drop in when the conversation ends.
+5. Wrap with smart tips + weather to demonstrate multi-source enrichment.
+
+## New API surfaces
+
+* `POST /api/v1/voice/session/start` – spins up a fresh voice session, returning Ava’s greeting and synthesized audio.
+* `POST /api/v1/voice/session/{sessionId}/transcribe` – accepts captured microphone audio (WebM/Opus) and returns the Google Speech transcript.
+* `POST /api/v1/voice/session/{sessionId}/message` – applies the conversation state machine, generates follow-up questions, and delivers the final itinerary once all details are collected.
+* `POST /api/v1/itinerary` still returns the full itinerary payload on first generation and also persists it to Firestore with an `id`.
+
+## Itinerary persistence with Firestore
+
+  Ava persists each generated itinerary in Firestore—whether it originated from the form or the new voice journey. The primary `/api/v1/itinerary` endpoint always returns the canonical document (including its `id`), so the frontend can resume planning or share links across devices without juggling multiple sources of truth.
 
 ## Tech Stack
 
@@ -54,9 +76,15 @@ This is a web application that helps you plan your trips with the power of AI. I
     You will need to provide:
     - `GCP_PROJECT_ID`: Your Google Cloud Project ID.
     - `GCP_LOCATION`: The Google Cloud region for your project (e.g., `us-central1`).
-    - `MAPS_API_KEY`: Your Google Maps API key.
+    - `MAPS_API_KEY` / `GOOGLE_MAPS_API_KEY`: Your Google Maps Platform key (enable Maps, Places, and Weather APIs; restrict it to `weather.googleapis.com` as well as any other services you use).
+    - `GOOGLE_APPLICATION_CREDENTIALS`: Path to the Firestore service-account JSON key (e.g., `api/credentials/firestore.json`).
+    - `FIRESTORE_COLLECTION`: The collection name for storing itineraries (defaults to `itineraries`).
 
-3.  **Set up the Frontend:**
+3.  **Create a Firestore service account:**
+    - In Google Cloud console, go to **IAM & Admin → Service Accounts** and create an account with the `Cloud Datastore User` role.
+    - Generate a JSON key, download it, and place it in `api/credentials/firestore.json` (the path you referenced above). Keep this file out of version control.
+
+4.  **Set up the Frontend:**
     ```bash
     cd app
     npm install
@@ -64,11 +92,11 @@ This is a web application that helps you plan your trips with the power of AI. I
     ```
     The frontend will be available at `http://localhost:5173` (or another port if 5173 is in use).
 
-4.  **Set up the Backend:**
+5.  **Set up the Backend:**
     ```bash
     cd api
     python -m venv .venv
-    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
+    source .venv/bin/activate  # On Windows, use `.venv\Scriptsctivate`
     pip install -r requirements.txt
     uvicorn main:app --reload --port 8000
     ```
@@ -85,6 +113,15 @@ To use the live features powered by Google Gemini, you need to:
     ```
     Make sure you are authenticated with the same Google Cloud project ID you specified in your `.env` file.
 3.  **Enable in the UI:** In the application's user interface, toggle the "Enable live data" switch.
+
+### Google Weather API setup
+
+This project now sources forecasts from the Google Maps Platform Weather API.
+
+1. In the [Google Cloud Console](https://console.cloud.google.com/), open **APIs & Services → Library** for project `gen-ai-hackathon-472312` (or your own) and enable **Weather API**. Billing must be active on the project.
+2. If your Maps key is restricted, add `weather.googleapis.com` to the allowed services.
+3. Set `GOOGLE_MAPS_API_KEY` (or `MAPS_API_KEY`) in your `.env` and `.env.local` files to the same key.
+4. After propagating the changes (usually a few minutes), the backend `/api/v1/weather-forecast` endpoint will automatically use the Google Weather responses.
 
 ## Project Structure
 
