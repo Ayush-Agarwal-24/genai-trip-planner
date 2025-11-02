@@ -115,7 +115,8 @@ def _synthesize(text: str) -> str:
         )
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
-            speaking_rate=1.02,
+            speaking_rate=0.95,
+            pitch=1.0,
         )
         response = _tts().synthesize_speech(
             input=synthesis_input,
@@ -162,7 +163,10 @@ def _parse_slot_value(slot: str, utterance: str) -> Optional[Any]:
         return None
     lower = utterance.lower()
     if slot in {"origin", "destination"}:
-        return utterance.title()
+        # Trim stray leading/trailing punctuation that STT may include (e.g., trailing period).
+        cleaned = re.sub(r"^[\s\-–—\.,;:!?]+|[\s\.,;:!?]+$", "", utterance)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+        return cleaned.title()
     if slot in {"start_date", "end_date"}:
         try:
             date_value = date_parser.parse(utterance, fuzzy=True).date()

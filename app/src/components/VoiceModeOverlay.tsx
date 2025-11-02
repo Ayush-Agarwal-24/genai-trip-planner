@@ -65,6 +65,16 @@ function blobToBase64(blob: Blob): Promise<string> {
 function playAudio(audioBase64?: string | null) {
   if (!audioBase64) return;
   const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+  // Slightly slower playback for clarity; preserve pitch if supported.
+  try {
+    audio.playbackRate = 0.96;
+    // @ts-expect-error preservesPitch is not in the TS lib by default
+    if ('preservesPitch' in audio) (audio as any).preservesPitch = true;
+    // @ts-expect-error webkitPreservesPitch is not in the TS lib by default
+    if ('webkitPreservesPitch' in audio) (audio as any).webkitPreservesPitch = true;
+    // @ts-expect-error mozPreservesPitch is not in the TS lib by default
+    if ('mozPreservesPitch' in audio) (audio as any).mozPreservesPitch = true;
+  } catch {}
   void audio.play().catch((error) => {
     console.warn('Audio playback failed', error);
   });
@@ -90,6 +100,7 @@ export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose, onItiner
   const chunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sessionStartedRef = useRef(false);
+  const lastAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const canRecord = useMemo(
     () => MICROPHONE_SUPPORTED && !disabled && !!sessionId && !isProcessing && !sessionComplete,
@@ -99,6 +110,39 @@ export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose, onItiner
   const appendMessage = useCallback((message: VoiceMessage) => {
     setMessages((prev) => [...prev, message]);
   }, []);
+
+  const BROWSER_TTS_SUPPORTED = useMemo(() => {
+    return typeof window !== 'undefined' && 'speechSynthesis' in window;
+  }, []);
+
+  function playAssistantResponse(text: string, audioBase64?: string | null) {
+    // Prefer client TTS for natural prosody when available; fallback to server MP3.
+    if (BROWSER_TTS_SUPPORTED && text) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.95; // slightly slower
+        utterance.pitch = 1.05; // a touch warmer
+        window.speechSynthesis.speak(utterance);
+        return;
+      } catch (e) {
+        console.warn('Client TTS failed, falling back to audio', e);
+      }
+    }
+    // Fallback to server-provided audio
+    if (audioBase64) {
+      const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+      try {
+        audio.playbackRate = 0.96;
+        // @ts-expect-error preservesPitch family
+        if ('preservesPitch' in audio) (audio as any).preservesPitch = true;
+      } catch {}
+      lastAudioRef.current = audio;
+      void audio.play().catch((error) => {
+        console.warn('Audio playback failed', error);
+      });
+    }
+  }
 
   const startSession = useCallback(async () => {
     if (!MICROPHONE_SUPPORTED) {
@@ -113,7 +157,7 @@ export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose, onItiner
       const payload: VoiceSessionResponse = await response.json();
       setSessionId(payload.sessionId);
       appendMessage({ id: uniqueId(), role: 'assistant', text: payload.text });
-      playAudio(payload.audio);
+      playAssistantResponse(payload.text, payload.audio);
       if (payload.warnings?.length) {
         setError(payload.warnings.join(' '));
       }
@@ -156,7 +200,7 @@ export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose, onItiner
         }
         const payload: VoiceReplyResponse = await response.json();
         appendMessage({ id: uniqueId(), role: 'assistant', text: payload.reply });
-        playAudio(payload.audio);
+        playAssistantResponse(payload.reply, payload.audio);
         if (payload.warnings?.length) {
           setError(payload.warnings.join(' '));
         } else {
@@ -176,6 +220,12 @@ export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose, onItiner
           } catch (e) {
             // non-fatal UI callback error
             console.warn('onItineraryReady callback failed', e);
+          }
+          // Close voice overlay once plan is loaded and shown
+          try {
+            onClose();
+          } catch (e) {
+            console.warn('Closing voice overlay failed', e);
           }
         }
       } catch (err) {
@@ -232,6 +282,17 @@ export function VoiceModeOverlay({ disabled, onApplyItinerary, onClose, onItiner
     }
     setError(null);
     try {
+      // Barge-in: stop any current assistant audio/tts when user starts speaking
+      try {
+        if (BROWSER_TTS_SUPPORTED) {
+          window.speechSynthesis.cancel();
+        }
+        if (lastAudioRef.current) {
+          lastAudioRef.current.pause();
+          lastAudioRef.current.currentTime = 0;
+          lastAudioRef.current = null;
+        }
+      } catch {}
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       chunksRef.current = [];

@@ -5,7 +5,7 @@ This is a web application that helps you plan your trips with the power of AI. I
 ## Features
 
 * **Travel Readiness Compass:** Gemini enriches each itinerary with a live radar across budget fit, logistics, weather resilience, sustainability and theme alignment, complete with alerts and recommended next actions.
-* **Ava - Live Voice Mode:** A telecaller-style voice journey that captures all trip requirements via Google Cloud Speech and instantly produces a fresh itinerary.
+* **Ava - Live Voice Mode:** A guided voice journey that captures trip requirements via Google Cloud Speech and produces a fresh itinerary. When the plan is ready, it auto-loads in the planner and the voice overlay closes.
 * **AI Trip Preview:** Launch a cinematic, narrated walkthrough of each day; the script is auto-generated and streams through the browser speech engine for showtime.
 * **Personalized Itinerary Generation:** Get a custom-tailored itinerary based on your destination and preferences.
 * **Interactive Map View:** Visualize your trip on a map.
@@ -96,7 +96,7 @@ This is a web application that helps you plan your trips with the power of AI. I
     ```bash
     cd api
     python -m venv .venv
-    source .venv/bin/activate  # On Windows, use `.venv\Scriptsctivate`
+    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
     pip install -r requirements.txt
     uvicorn main:app --reload --port 8000
     ```
@@ -137,3 +137,20 @@ Contributions are welcome! Please feel free to open an issue or submit a pull re
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
+
+## Voice Mode Notes
+
+- Requirements: Google Cloud Speech-to-Text and Text-to-Speech are used on the backend (see `api/requirements.txt`). Authenticate via `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS` to your service account JSON.
+- Browser: needs microphone permission and `MediaRecorder` support (Chrome/Edge). Works on `https://` or `http://localhost` for dev.
+- Behavior: when the voice session completes, the generated itinerary is applied and the planner overlay opens automatically; the voice overlay closes.
+- Audio: the app prefers client-side speech synthesis when available for natural prosody, otherwise plays the backend MP3. Speech rate is tuned slightly slower for clarity.
+- Barge-in: starting to speak cancels any ongoing assistant speech so you don’t wait on playback.
+- Known: the flow is push-to-talk (non-streaming). A streaming upgrade can be added later if desired.
+
+### Frontend API base URL (dev)
+
+Create `app/.env.local` if needed and set:
+
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
